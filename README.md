@@ -4,7 +4,7 @@ This is the start of a Pacman clone written in PHP.  So far all I've done is wri
 
 To use:
 
-1, Create a new database called phacman.
-2, mysql phacman < db.sql
-3, php -dopen_basedir= scrape.php 
-4, inspect the database and query at will
+* Create a new database called phacman.
+* mysql phacman < db.sql
+* php -dopen_basedir= scrape.php 
+* inspect the database and query at will
