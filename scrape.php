@@ -30,6 +30,12 @@ class Scrape
 	private $sections = ['name', 'version', 'desc', 'url', 'arch', 'builddate', 'installdate', 'packager', 'size', 'reason', 'validation', 'filename', 'csize', 'isize', 'md5sum', 'sha256sum', 'pgpsig'];
 	public $db;
 
+	public $stmts = [
+		'packageFileInsert' => FALSE,
+		'packageDependInsert' => FALSE,
+		'packageConflictInsert' => FALSE
+	];
+
 	public $repoInsertStmt;
 	public $groupInsertStmt;
 	public $licenseInsertStmt;
@@ -77,18 +83,25 @@ class Scrape
 			$this->licenses[$row['name']] = $row['id'];
 		}
 
-		$this->packageInsertStmt = $this->db->prepare('INSERT INTO phacman_package(name, version) VALUES(:name, :version) ON DUPLICATE KEY UPDATE id=last_insert_id(id);');
+		$this->packageInsertStmt = $this->db->prepare('INSERT INTO phacman_package(name) VALUES(:name) ON DUPLICATE KEY UPDATE id=last_insert_id(id);');
 
-		$this->packageRepoInsertStmt = $this->db->prepare('INSERT INTO phacman_package_repo(repoId, packageId, description, url, arch, builddate, packager, validation, filename, csize, isize, md5sum, sha256sum, pgpsig)
-VALUES(:repoId, :packageId, :description, :url, :arch, :builddate, :packager, :validation, :filename, :csize, :isize, :md5sum, :sha256sum, :pgpsig) ON DUPLICATE KEY UPDATE
-repoId = VALUES(repoId), packageId = VALUES(packageId), description = VALUES(description), url = VALUES(url), arch = VALUES(arch), builddate = VALUES(builddate),
+		$this->packageVersionInsertStmt = $this->db->prepare('INSERT INTO phacman_package_version(packageId, version) VALUES(:packageId, :version) ON DUPLICATE KEY UPDATE id=last_insert_id(id);');
+
+		$this->packageRepoInsertStmt = $this->db->prepare('INSERT INTO phacman_package_repo(repoId, packageVersionId, description, url, arch, builddate, packager, validation, filename, csize, isize, md5sum, sha256sum, pgpsig)
+VALUES(:repoId, :packageVersionId, :description, :url, :arch, :builddate, :packager, :validation, :filename, :csize, :isize, :md5sum, :sha256sum, :pgpsig) ON DUPLICATE KEY UPDATE
+repoId = VALUES(repoId), packageVersionId = VALUES(packageVersionId), description = VALUES(description), url = VALUES(url), arch = VALUES(arch), builddate = VALUES(builddate),
 packager = VALUES(packager), validation = VALUES(validation), filename = VALUES(filename), csize = VALUES(csize), isize = VALUES(isize), md5sum = VALUES(md5sum), sha256sum = VALUES(sha256sum),
 pgpsig = VALUES(pgpsig);');
 
-		$this->packageLocalInsertStmt = $this->db->prepare('INSERT INTO phacman_package_local(repoId, packageId, description, url, arch, builddate, installdate, packager, size, reason, validation)
-VALUES(:repoId, :packageId, :description, :url, :arch, from_unixtime(:builddate), from_unixtime(:installdate), :packager, :size, :reason, :validation) ON DUPLICATE KEY UPDATE
-repoId = VALUES(repoId), packageId = VALUES(packageId), description = VALUES(description), url = VALUES(url), arch = VALUES(arch), builddate = VALUES(builddate),
+		$this->packageLocalInsertStmt = $this->db->prepare('INSERT INTO phacman_package_local(repoId, packageVersionId, description, url, arch, builddate, installdate, packager, size, reason, validation)
+VALUES(:repoId, :packageVersionId, :description, :url, :arch, from_unixtime(:builddate), from_unixtime(:installdate), :packager, :size, :reason, :validation) ON DUPLICATE KEY UPDATE
+repoId = VALUES(repoId), packageVersionId = VALUES(packageVersionId), description = VALUES(description), url = VALUES(url), arch = VALUES(arch), builddate = VALUES(builddate),
 installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(size), reason = VALUES(reason), validation = VALUES(validation)');
+
+
+		$this->stmts['packageFileInsert'] = $this->db->prepare('INSERT INTO phacman_package_files(packageVersionId, file) values(:packageVersionId, :file);');
+		$this->stmts['packageDependInsert'] = $this->db->prepare('INSERT INTO phacman_package_depends(packageVersionId, packageDependId, relop, version) VALUES(:packageVersionId, :packageDependId, :relop, :version);');
+		$this->stmts['packageConflictInsert'] = $this->db->prepare('INSERT INTO phacman_package_conflicts(packageVersionId, packageConflictId, relop, version) VALUES(:packageVersionId, :packageConflictId, :relop, :version);');
 	}
 
 	public function importLocal()
@@ -124,25 +137,33 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 				':validation' => FALSE
 			];
 
-			$dets = $this->parse($desc, $packageLocalDets);
+			$sections = $this->parse($desc, $packageLocalDets);
 
 			if(isset($packageLocalDets[':name']) && isset($packageLocalDets[':version']))
 			{
-				if($this->packageInsertStmt->execute([':name' => $packageLocalDets[':name'], ':version' => $packageLocalDets[':version']]))
+				if($this->packageInsertStmt->execute([':name' => $packageLocalDets[':name']]))
 				{
-					$name = $packageLocalDets[':name'];
-					$version = $packageLocalDets[':version'];
-					unset($packageLocalDets[':name']);
-					unset($packageLocalDets[':version']);
-					$packageLocalDets[':packageId'] = $this->db->lastInsertId();
+					$packageId = $this->db->lastInsertId();
 
-					if($this->packageLocalInsertStmt->execute($packageLocalDets) && $this->packageLocalInsertStmt->rowCount() == 1)
+					if($this->packageVersionInsertStmt->execute([':packageId' => $packageId, ':version' => $packageLocalDets[':version']]))
 					{
-// TODO: import $dets
+						$packageVersionId = $this->db->lastInsertId();
+
+						$name = $packageLocalDets[':name'];
+						$version = $packageLocalDets[':version'];
+						unset($packageLocalDets[':name']);
+						unset($packageLocalDets[':version']);
+						$packageLocalDets[':packageVersionId'] = $this->db->lastInsertId();
+
+						if($this->packageLocalInsertStmt->execute($packageLocalDets) && $this->packageLocalInsertStmt->rowCount() == 1)
+						{
+							$this->importDets($packageId, $packageVersionId, $sections);
+						}
 					}
 				}
 			}
 		}
+
 	}
 
 	public function importSync($repoName)
@@ -176,19 +197,69 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 				':pgpsig' => FALSE
 			];
 
-			$this->parse($desc, $packageRepoDets);
+			$sections = $this->parse($desc, $packageRepoDets);
 			if(isset($packageRepoDets[':name']) && isset($packageRepoDets[':version']))
 			{
-				if($this->packageInsertStmt->execute([':name' => $packageRepoDets[':name'], ':version' => $packageRepoDets[':version']]))
+				if($this->packageInsertStmt->execute([':name' => $packageRepoDets[':name']]))
 				{
-					unset($packageRepoDets[':name']);
-					unset($packageRepoDets[':version']);
-					$packageRepoDets[':packageId'] = $this->db->lastInsertId();
-					if($this->packageRepoInsertStmt->execute($packageRepoDets) && $this->packageRepoInsertStmt->rowCount() == 1)
+					$packageId = $this->db->lastInsertId();
+
+					if($this->packageVersionInsertStmt->execute([':packageId' => $packageId, ':version' => $packageRepoDets[':version']]))
 					{
-// TODO: import $dets
+						$packageVersionId = $this->db->lastInsertId();
+						unset($packageRepoDets[':name']);
+						unset($packageRepoDets[':version']);
+						$packageRepoDets[':packageVersionId'] = $this->db->lastInsertId();
+						if($this->packageRepoInsertStmt->execute($packageRepoDets) && $this->packageRepoInsertStmt->rowCount() == 1)
+						{
+							$this->importDets($packageId, $packageVersionId, $sections);
+						}
 					}
 				}
+			}
+		}
+	}
+
+	public function importDets($packageId, $packageVersionId, $sections)
+	{
+		foreach($sections as $section => $dets)
+		{
+			switch($section)
+			{
+				case 'files':
+				{
+					$firstFile = array_pop($dets);
+					$query = 'INSERT INTO phacman_package_files(packageVersionId, file) VALUES('.$packageVersionId.", '".$firstFile."')";
+					foreach($dets as $file)
+					{
+						$query .= ',('.$packageVersionId.", '".$file."')";
+					}
+					// we use a plain query for speed.
+					$this->db->query($query);
+				}
+				break;
+
+				case 'depends':
+				{
+					foreach($dets as $package => $dets)
+					{
+						$this->packageInsertStmt->execute([':name' => $package]);
+						$packageDependId = $this->db->lastInsertId();
+						$this->stmts['packageDependInsert']->execute([':packageVersionId' => $packageVersionId, ':packageDependId' => $packageDependId, ':relop' => $dets[0], ':version' => $dets[1]]);
+					}
+				}
+				break;
+
+				case 'conflicts':
+				{
+					foreach($dets as $package => $dets)
+					{
+						$this->packageInsertStmt->execute([':name' => $package]);
+						$packageConflictId = $this->db->lastInsertId();
+						$this->stmts['packageConflictInsert']->execute([':packageVersionId' => $packageVersionId, ':packageConflictId' => $packageConflictId, ':relop' => $dets[0], ':version' => $dets[1]]);
+					}
+				}
+				break;
 			}
 		}
 	}
@@ -402,8 +473,8 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 
 
 $s = new Scrape();
-$s->importSync('core');
-$s->importSync('extra');
-$s->importSync('community');
-$s->importSync('testing');
+//$s->importSync('core');
+//$s->importSync('extra');
+//$s->importSync('community');
+//$s->importSync('testing');
 $s->importLocal();

@@ -1,3 +1,7 @@
+drop database if exists phacman;
+create database phacman;
+use phacman;
+
 create table phacman_repo (
  id int primary key auto_increment,
  name varchar(128),
@@ -9,14 +13,21 @@ insert into phacman_repo(name) values('local'), ('core'), ('extra'), ('community
 create table phacman_package (
  id int primary key auto_increment,
  name varchar(255),
+ unique(name)
+) engine=innodb;
+
+create table phacman_package_version (
+ id int primary key auto_increment,
+ packageId int not null,
  version varchar(128),
- unique(name, version)
+ unique(packageId, version),
+ foreign key(packageId) references phacman_package(id)
 ) engine=innodb;
 
 create table phacman_package_repo (
  id int primary key auto_increment,
  repoId int not null,
- packageId int not null,
+ packageVersionId int not null,
  description text,
  url varchar(255),
  arch enum('x86_64', 'i686', 'any'),
@@ -29,14 +40,15 @@ create table phacman_package_repo (
  md5sum char(32),
  sha256sum char(64),
  pgpsig text,
- foreign key(packageId) references phacman_package(id),
+ unique(packageVersionId),
+ foreign key(packageVersionId) references phacman_package_version(id),
  foreign key(repoId) references phacman_repo(id)
 ) engine=innodb;
 
 create table phacman_package_local (
  id int primary key auto_increment,
  repoId int not null,
- packageId int not null,
+ packageVersionId int not null,
  description text,
  url varchar(255),
  arch enum('x86_64', 'i686', 'any'),
@@ -46,25 +58,26 @@ create table phacman_package_local (
  size bigint,
  reason int,
  validation enum('pgp', 'none'),
- foreign key(packageId) references phacman_package(id),
+ unique(packageVersionId),
+ foreign key(packageVersionId) references phacman_package_version(id),
  foreign key(repoId) references phacman_repo(id)
 ) engine=innodb;
 
 create table phacman_package_files (
  id int primary key auto_increment,
- packageId int,
+ packageVersionId int,
  file varchar(255),
- foreign key(packageId) references phacman_package(id),
- unique(packageId, file)
+ foreign key(packageVersionId) references phacman_package_version(id),
+ unique(packageVersionId, file)
 ) engine=innodb;
 
 create table phacman_package_backup (
  id int primary key auto_increment,
- packageId int,
+ packageVersionId int,
  file varchar(255),
  md5sum char(32), 
- foreign key(packageId) references phacman_package(id),
- unique(packageId, file)
+ foreign key(packageVersionId) references phacman_package_version(id),
+ unique(packageVersionId, file)
 ) engine=innodb;
 
 create table phacman_group (
@@ -75,43 +88,43 @@ create table phacman_group (
 
 create table phacman_package_groups (
  id int primary key auto_increment,
- packageId int,
+ packageVersionId int,
  groupId int,
- foreign key(packageId) references phacman_package(id),
+ foreign key(packageVersionId) references phacman_package_version(id),
  foreign key(groupId) references phacman_package(id),
- unique(packageId, groupId)
+ unique(packageVersionId, groupId)
 ) engine=innodb;
 
 create table phacman_package_depends (
  id int primary key auto_increment,
- packageId int,
+ packageVersionId int,
  packageDependId int,
- relop enum('=', '<', '>', '<=', '>='),
+ relop enum('=', '<', '>', '<=', '>=', ''),
  version varchar(32),
- foreign key(packageId) references phacman_package(id),
+ foreign key(packageVersionId) references phacman_package_version(id),
  foreign key(packageDependId) references phacman_package(id),
- unique(packageId, packageDependId)
+ unique(packageVersionId, packageDependId)
 ) engine=innodb;
 
 create table phacman_package_conflicts (
  id int primary key auto_increment,
- packageId int,
+ packageVersionId int,
  packageConflictId int,
- relop enum('=', '<', '>', '<=', '>='),
+ relop enum('=', '<', '>', '<=', '>=', ''),
  version varchar(32),
- foreign key(packageId) references phacman_package(id),
+ foreign key(packageVersionId) references phacman_package_version(id),
  foreign key(packageConflictId) references phacman_package(id),
- unique(packageId,packageConflictId)
+ unique(packageVersionId,packageConflictId)
 ) engine=innodb;
 
 create table phacman_package_provides (
  id int primary key auto_increment,
- packageId int,
+ packageVersionId int,
  providePackageId int,
  version varchar(32),
- foreign key(packageId) references phacman_package(id),
+ foreign key(packageVersionId) references phacman_package_version(id),
  foreign key(providePackageId) references phacman_package(id),
- unique(packageId,providePackageId)
+ unique(packageVersionId,providePackageId)
 ) engine=innodb;
 
 create table phacman_license (
@@ -122,28 +135,28 @@ create table phacman_license (
 
 create table phacman_package_license (
  id int primary key auto_increment,
- packageId int,
+ packageVersionId int,
  licenseId int,
- foreign key(packageId) references phacman_package(id),
+ foreign key(packageVersionId) references phacman_package_version(id),
  foreign key(licenseId) references phacman_package(id),
- unique(packageId,licenseId)
+ unique(packageVersionId,licenseId)
 ) engine=innodb;
 
 create table phacman_package_optdepends (
  id int primary key auto_increment,
- packageId int,
+ packageVersionId int,
  optdependPackageId int,
  details varchar(255),
- foreign key(packageId) references phacman_package(id),
+ foreign key(packageVersionId) references phacman_package_version(id),
  foreign key(optdependPackageId) references phacman_package(id),
- unique(packageId,optdependPackageId)
+ unique(packageVersionId,optdependPackageId)
 ) engine=innodb;
 
 create table phacman_package_replaces (
  id int primary key auto_increment,
- packageId int,
+ packageVersionId int,
  replacePackageId int,
- foreign key(packageId) references phacman_package(id),
+ foreign key(packageVersionId) references phacman_package_version(id),
  foreign key(replacePackageId) references phacman_package(id),
- unique(packageId,replacePackageId)
+ unique(packageVersionId,replacePackageId)
 ) engine=innodb;
