@@ -9,4 +9,6 @@ To use:
 * php -dopen_basedir= scrape.php 
 * inspect the database and query at will
 
+## EER Diagram
+
 ![EER Diagram](http://www.andrewrose.co.uk/phacman.png "EER Diagram")
