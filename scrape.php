@@ -33,7 +33,8 @@ class Scrape
 	public $stmts = [
 		'packageFileInsert' => FALSE,
 		'packageDependInsert' => FALSE,
-		'packageConflictInsert' => FALSE
+		'packageConflictInsert' => FALSE,
+		'packageOptdependInsert' => FALSE
 	];
 
 	public $repoInsertStmt;
@@ -102,6 +103,12 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 		$this->stmts['packageFileInsert'] = $this->db->prepare('INSERT INTO phacman_package_files(packageVersionId, file) values(:packageVersionId, :file);');
 		$this->stmts['packageDependInsert'] = $this->db->prepare('INSERT INTO phacman_package_depends(packageVersionId, packageDependId, relop, version) VALUES(:packageVersionId, :packageDependId, :relop, :version);');
 		$this->stmts['packageConflictInsert'] = $this->db->prepare('INSERT INTO phacman_package_conflicts(packageVersionId, packageConflictId, relop, version) VALUES(:packageVersionId, :packageConflictId, :relop, :version);');
+		$this->stmts['packageOptdependInsert'] = $this->db->prepare('INSERT INTO phacman_package_optdepends(packageVersionId, optdependPackageId, details) VALUES(:packageVersionId, :optdependPackageId, :details);');
+		$this->stmts['packageGroupInsert'] = $this->db->prepare('INSERT INTO phacman_package_groups(packageVersionId, groupId) VALUES(:packageVersionId, :groupId);');
+		$this->stmts['packageLicenseInsert'] = $this->db->prepare('INSERT INTO phacman_package_license(packageVersionId, licenseId) VALUES(:packageVersionId, :licenseId);');
+		$this->stmts['packageProvideInsert'] = $this->db->prepare('INSERT INTO phacman_package_provides(packageVersionId, providePackageId, providePackageVersionId) VALUES(:packageVersionId, :providePackageId, :providePackageVersionId);');
+		$this->stmts['packageReplaceInsert'] = $this->db->prepare('INSERT INTO phacman_package_replaces(packageVersionId, replacePackageId) VALUES(:packageVersionId, :replacePackageId);');
+		$this->stmts['packageBackupInsert'] = $this->db->prepare('INSERT INTO phacman_package_backup(packageVersionId, file, md5sum) VALUES(:packageVersionId, :file, :md5sum);');
 	}
 
 	public function importLocal()
@@ -229,6 +236,7 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 				case 'files':
 				{
 					$firstFile = array_pop($dets);
+					if(!$firstFile) continue;
 					$query = 'INSERT INTO phacman_package_files(packageVersionId, file) VALUES('.$packageVersionId.", '".$firstFile."')";
 					foreach($dets as $file)
 					{
@@ -257,6 +265,77 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 						$this->packageInsertStmt->execute([':name' => $package]);
 						$packageConflictId = $this->db->lastInsertId();
 						$this->stmts['packageConflictInsert']->execute([':packageVersionId' => $packageVersionId, ':packageConflictId' => $packageConflictId, ':relop' => $dets[0], ':version' => $dets[1]]);
+					}
+				}
+				break;
+
+				case 'optdepends':
+				{
+					foreach($dets as $packageName => $details)
+					{
+						$this->packageInsertStmt->execute([':name' => $packageName]);
+						$optdependPackageId = $this->db->lastInsertId();
+						$this->stmts['packageOptdependInsert']->execute([':packageVersionId' => $packageVersionId, ':optdependPackageId' => $optdependPackageId, ':details' => $details]);
+					}
+				}
+				break;
+
+				case 'groups':
+				{
+					foreach($dets as $groupName => $groupId)
+					{
+						$this->stmts['packageGroupInsert']->execute([':packageVersionId' => $packageVersionId, ':groupId' => $groupId]);
+					}
+				}
+				break;
+
+				case 'licenses':
+				{
+					foreach($dets as $groupName => $licenseId)
+					{
+						$this->stmts['packageLicenseInsert']->execute([':packageVersionId' => $packageVersionId, ':licenseId' => $licenseId]);
+					}
+				}
+				break;
+
+				case 'provides':
+				{
+					foreach($dets as $providePackageName => $providePackageVersion)
+					{
+						$this->packageInsertStmt->execute([':name' => $providePackageName]);
+						$providePackageId = $this->db->lastInsertId();
+
+						if($providePackageVersion)
+						{
+							$this->packageVersionInsertStmt->execute([':packageId' => $providePackageId, ':version' => $providePackageVersion]);
+							$providePackageVersionId = $this->db->lastInsertId();
+						}
+						else
+						{
+							$providePackageVersionId = NULL;
+						}
+
+						$this->stmts['packageProvideInsert']->execute([':packageVersionId' => $packageVersionId, ':providePackageId' => $providePackageId, ':providePackageVersionId' => $providePackageVersionId]);
+					}
+				}
+				break;
+
+				case 'backup':
+				{
+					foreach($dets as $fileName => $md5sum)
+					{
+						$this->stmts['packageBackupInsert']->execute([':packageVersionId' => $packageVersionId, ':file' => $fileName, ':md5sum' => $md5sum]);
+					}
+				}
+				break;
+
+				case 'replaces':
+				{
+					foreach($dets as $idx => $replacePackageName)
+					{
+						$this->packageInsertStmt->execute([':name' => $replacePackageName]);
+						$replacePackageId = $this->db->lastInsertId();
+						$this->stmts['packageReplaceInsert']->execute([':packageVersionId' => $packageVersionId, ':replacePackageId' => $replacePackageId]);
 					}
 				}
 				break;
@@ -473,8 +552,8 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 
 
 $s = new Scrape();
-//$s->importSync('core');
-//$s->importSync('extra');
-//$s->importSync('community');
-//$s->importSync('testing');
+$s->importSync('core');
+$s->importSync('extra');
+$s->importSync('community');
+$s->importSync('testing');
 $s->importLocal();

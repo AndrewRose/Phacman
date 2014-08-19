@@ -121,10 +121,11 @@ create table phacman_package_provides (
  id int primary key auto_increment,
  packageVersionId int,
  providePackageId int,
- version varchar(32),
+ providePackageVersionId int default null,
  foreign key(packageVersionId) references phacman_package_version(id),
  foreign key(providePackageId) references phacman_package(id),
- unique(packageVersionId,providePackageId)
+ foreign key(providePackageVersionId) references phacman_package_version(id),
+ unique(packageVersionId, providePackageId, providePackageVersionId)
 ) engine=innodb;
 
 create table phacman_license (
