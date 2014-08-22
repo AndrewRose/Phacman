@@ -1,7 +1,5 @@
 This is the start of a Pacman clone written in PHP.  So far all I've done is write scrape.php to scrape the pacman local and sync databases and insert the data into a relational database structure.
 
-* Note: most tables are populated now.
-
 To use:
 
 * Create a new database called phacman.
@@ -11,7 +9,7 @@ To use:
 
 ## EER Diagram
 
-![EER Diagram](http://www.andrewrose.co.uk/phacman.png "EER Diagram")
+![EER Diagram](http://www.andrewrose.co.uk/phacman2.png "EER Diagram")
 
 ## Example Queries
 
