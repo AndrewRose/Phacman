@@ -109,6 +109,8 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 
 		while(FALSE !== ($pkgdir = readdir($repoHandler)))
 		{
+			if($pkgdir == 'ALPM_DB_VERSION') continue;
+
 			if($pkgdir == '.' || $pkgdir == '..') continue;
 			$desc = file_get_contents(self::dbPath.'/local/'.$pkgdir.'/desc');
 			$desc .= file_get_contents(self::dbPath.'/local/'.$pkgdir.'/files');
