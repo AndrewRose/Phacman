@@ -45,15 +45,15 @@ pgpsig = VALUES(pgpsig);',
 VALUES(:repoId, :packageVersionId, :description, :url, :arch, from_unixtime(:builddate), from_unixtime(:installdate), :packager, :size, :reason, :validation) ON DUPLICATE KEY UPDATE
 repoId = VALUES(repoId), packageVersionId = VALUES(packageVersionId), description = VALUES(description), url = VALUES(url), arch = VALUES(arch), builddate = VALUES(builddate),
 installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(size), reason = VALUES(reason), validation = VALUES(validation)',
-		'packageFileInsert' => 'INSERT INTO phacman_package_files(packageVersionId, file) values(:packageVersionId, :file);',
-		'packageDependInsert' => 'INSERT INTO phacman_package_depends(packageVersionId, packageDependId, relop, version) VALUES(:packageVersionId, :packageDependId, :relop, :version);',
-		'packageConflictInsert' => 'INSERT INTO phacman_package_conflicts(packageVersionId, packageConflictId, relop, version) VALUES(:packageVersionId, :packageConflictId, :relop, :version);',
-		'packageOptdependInsert' => 'INSERT INTO phacman_package_optdepends(packageVersionId, optdependPackageId, details) VALUES(:packageVersionId, :optdependPackageId, :details);',
-		'packageGroupInsert' => 'INSERT INTO phacman_package_groups(packageVersionId, groupId) VALUES(:packageVersionId, :groupId);',
-		'packageLicenseInsert' => 'INSERT INTO phacman_package_license(packageVersionId, licenseId) VALUES(:packageVersionId, :licenseId);',
-		'packageProvideInsert' => 'INSERT INTO phacman_package_provides(packageVersionId, providePackageId, providePackageVersionId) VALUES(:packageVersionId, :providePackageId, :providePackageVersionId);',
-		'packageReplaceInsert' => 'INSERT INTO phacman_package_replaces(packageVersionId, replacePackageId) VALUES(:packageVersionId, :replacePackageId);',
-		'packageBackupInsert' => 'INSERT INTO phacman_package_backup(packageVersionId, file, md5sum) VALUES(:packageVersionId, :file, :md5sum);'
+		'packageFileInsert' => 'INSERT IGNORE INTO phacman_package_files(packageVersionId, file) values(:packageVersionId, :file);',
+		'packageDependInsert' => 'INSERT IGNORE INTO phacman_package_depends(packageVersionId, packageDependId, relop, version) VALUES(:packageVersionId, :packageDependId, :relop, :version);',
+		'packageConflictInsert' => 'INSERT IGNORE INTO phacman_package_conflicts(packageVersionId, packageConflictId, relop, version) VALUES(:packageVersionId, :packageConflictId, :relop, :version);',
+		'packageOptdependInsert' => 'INSERT IGNORE INTO phacman_package_optdepends(packageVersionId, optdependPackageId, details) VALUES(:packageVersionId, :optdependPackageId, :details);',
+		'packageGroupInsert' => 'INSERT IGNORE INTO phacman_package_groups(packageVersionId, groupId) VALUES(:packageVersionId, :groupId);',
+		'packageLicenseInsert' => 'INSERT IGNORE INTO phacman_package_license(packageVersionId, licenseId) VALUES(:packageVersionId, :licenseId);',
+		'packageProvideInsert' => 'INSERT IGNORE INTO phacman_package_provides(packageVersionId, providePackageId, providePackageVersionId) VALUES(:packageVersionId, :providePackageId, :providePackageVersionId);',
+		'packageReplaceInsert' => 'INSERT IGNORE INTO phacman_package_replaces(packageVersionId, replacePackageId) VALUES(:packageVersionId, :replacePackageId);',
+		'packageBackupInsert' => 'INSERT IGNORE INTO phacman_package_backup(packageVersionId, file, md5sum) VALUES(:packageVersionId, :file, :md5sum);'
 	];
 
 	public function __construct()
@@ -172,7 +172,8 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 			$file = $file->getPathName();
 
 			$desc = file_get_contents($file.'/desc');
-			$desc .= file_get_contents($file.'/depends');
+			// /depends has been merged with /desc
+			//$desc .= file_get_contents($file.'/depends');
 
 			$desc = explode("\n\n%", $desc);
 
@@ -224,7 +225,7 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 				case 'files':
 				{
 					$firstFile = array_pop($dets);
-					if(!$firstFile) continue;
+					if(!$firstFile) break;
 					$query = 'INSERT INTO phacman_package_files(packageVersionId, file) VALUES('.$packageVersionId.", '".$firstFile."')";
 					foreach($dets as $file)
 					{
