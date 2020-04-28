@@ -9,7 +9,7 @@ To use:
 
 ## EER Diagram
 
-![EER Diagram](http://www.andrewrose.co.uk/phacman.png "EER Diagram")
+![EER Diagram](https://andrewrose.co.uk/phacman.png "EER Diagram")
 
 ## Example Queries
 
