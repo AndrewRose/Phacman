@@ -59,6 +59,7 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 	public function __construct()
 	{
 		$this->db = new \PDO('mysql:host=localhost;dbname=phacman', 'root', '');
+		$this->db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
 		$this->stmts['repoInsert'] = $this->db->prepare($this->stmts['repoInsert']);
 		$this->stmts['groupInsert'] = $this->db->prepare($this->stmts['groupInsert']);
@@ -128,7 +129,7 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 				':installdate' => FALSE,
 				':packager' => FALSE,
 				':size' => FALSE,
-				':reason' => FALSE,
+				':reason' => 0,
 				':validation' => FALSE
 			];
 
@@ -187,7 +188,7 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 				':validation' => FALSE,
 				':filename' => FALSE, 
 				':csize' => FALSE,
-				':isize' => FALSE,
+				':isize' => 0,
 				':md5sum' => FALSE,
 				':sha256sum' => FALSE,
 				':pgpsig' => FALSE
@@ -206,7 +207,7 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 						unset($packageRepoDets[':name']);
 						unset($packageRepoDets[':version']);
 						$packageRepoDets[':packageVersionId'] = $this->db->lastInsertId();
-						if($this->stmts['packageRepoInsert']->execute($packageRepoDets) && $this->stmts['packageRepoInsert']->rowCount() == 1)
+						if(!$this->stmts['packageRepoInsert']->execute($packageRepoDets) && $this->stmts['packageRepoInsert']->rowCount() == 1)
 						{
 							$this->importDets($packageId, $packageVersionId, $sections);
 						}
@@ -224,15 +225,27 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 			{
 				case 'files':
 				{
+					// we use a plain query for speed.
 					$firstFile = array_pop($dets);
 					if(!$firstFile) break;
-					$query = 'INSERT INTO phacman_package_files(packageVersionId, file) VALUES('.$packageVersionId.", '".$firstFile."')";
+					$query1 = 'INSERT INTO phacman_package_files(packageVersionId, file) VALUES';
+					$query2 = '('.$packageVersionId.", '".$firstFile."')";
+					$count = 0;
 					foreach($dets as $file)
 					{
-						$query .= ',('.$packageVersionId.", '".$file."')";
+						if($count>20)
+						{
+							$this->db->query($query1.' '.$query2);
+							$query2 = '('.$packageVersionId.", '".$file."')";
+							$count = 0;
+						}
+						else
+						{
+							$count++;
+							$query2 .= ',('.$packageVersionId.", '".$file."')";
+						}
 					}
-					// we use a plain query for speed.
-					$this->db->query($query);
+					if($query2) $this->db->query($query1.' '.$query2);
 				}
 				break;
 
@@ -338,9 +351,8 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 		if(!isset($this->repos[$name]))
 		{
 			$this->repoInsert->execute([':name' => $name]);
-			$row = $this->repoInsert->fetch(\PDO::FETCH_ASSOC);
 			$this->repos[$name] = $this->db->lastInsertId();
-			return $row['id'];
+			return $this->repos[$name];
 		}
 		return $this->repos[$name];
 	}
@@ -349,18 +361,16 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 	{
 		$name = trim($name);
 		$this->stmts['groupInsert']->execute([':name' => $name]);
-		$row = $this->stmts['groupInsert']->fetch(\PDO::FETCH_ASSOC);
 		$this->groups[$name] = $this->db->lastInsertId();
-		return $row['id'];
+		return $this->groups[$name];;
 	}
 
 	public function insertLicense($name)
 	{
 		$name = trim($name);
 		$this->stmts['licenseInsert']->execute([':name' => $name]);
-		$row = $this->stmts['licenseInsert']->fetch(\PDO::FETCH_ASSOC);
 		$this->licenses[$name] = $this->db->lastInsertId();
-		return $row['id'];
+		return $this->licenses[$name];
 	}
 
 	public function parse($desc, &$packageDets)
@@ -393,7 +403,7 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 			if(in_array($sectionName, $this->sections))
 			{
 				if($sectionName == 'desc') $sectionName = 'description';
-				$packageDets[':'.$sectionName] = $tmp[1]; //array_slice($tmp, 1);
+				if(isset($tmp[1])) $packageDets[':'.$sectionName] = $tmp[1]; //array_slice($tmp, 1);
 			}
 			else
 			{
@@ -541,8 +551,14 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 
 
 $s = new Scrape();
-$s->importSync('core');
-$s->importSync('extra');
-$s->importSync('community');
-$s->importSync('testing');
-$s->importLocal();
+
+try {
+	$s->importSync('core');
+	$s->importSync('extra');
+	$s->importSync('community');
+	$s->importSync('testing');
+	$s->importLocal();
+} catch (PDOException $e) {
+	echo $e->getMessage();
+	exit();
+}
