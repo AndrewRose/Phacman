@@ -6,7 +6,7 @@ To use:
 * php -dopen_basedir= scrape.php 
 * inspect the database and query at will
 
-
+![EER Diagram](https://andrewrose.co.uk/phacman.png)
 
 ## Example Queries
 
