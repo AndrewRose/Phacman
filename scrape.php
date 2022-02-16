@@ -150,7 +150,11 @@ installdate = VALUES(installdate), packager = VALUES(packager), size = VALUES(si
 						unset($packageLocalDets[':name']);
 						unset($packageLocalDets[':version']);
 						$packageLocalDets[':packageVersionId'] = $this->db->lastInsertId();
-
+if(!$packageLocalDets[':size'])
+{
+	$packageLocalDets[':size'] = 0;
+}
+//print_r($packageLocalDets);
 						if($this->stmts['packageLocalInsert']->execute($packageLocalDets) && $this->stmts['packageLocalInsert']->rowCount() == 1)
 						{
 							$this->importDets($packageId, $packageVersionId, $sections);
